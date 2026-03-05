@@ -9,8 +9,8 @@
 
 repo: opendatahub-io/odh-dashboard
 
-# Number of days before a PR is considered "stale"
-stale_days: 5
+# Number of days before a PR is considered "stale" (waiting too long for review)
+stale_days: 2
 
 # Bot authors to skip (not included in review-needed sections)
 bot_authors:

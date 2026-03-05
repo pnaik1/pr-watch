@@ -1,18 +1,18 @@
 ---
-name: pr-standup
-description: Generates a daily standup PR summary for GitHub repositories — PRs waiting for review, blocked tickets, CI failures, and stale items (5+ days). Configurable per team via config.yaml. Use when a user asks for a standup summary, PR status report, daily PR digest, or mentions labels like area/gen-ai or area/eval-hub.
+name: pr-watch
+description: PR health monitor — surfaces PRs waiting for review, blocked tickets, CI failures, and anything stale for 2+ days across GitHub repositories. Configurable per team via config.yaml. Use when a user asks about PR status, what's blocked, what needs review, CI failures, stale PRs, or mentions team labels like area/gen-ai or area/eval-hub.
 ---
 
-# PR Standup Summary Skill
+# PR Watch — PR Health Monitor
 
-Generates a daily standup report for open PRs filtered by team labels. Covers: waiting for review, blocked, CI status, and stale PRs (5+ days old).
+Gives a full health snapshot of open PRs for a team: what's waiting for review, what's blocked, what's failing CI, and what's been sitting too long.
 
 ## Configuration
 
 Read team config from [config.yaml](config.yaml) before starting. It defines:
 - `repo` — GitHub owner/repo
 - `teams` — list of team configs, each with a `name` and `labels` array
-- `stale_days` — threshold for "stale" (default: 5)
+- `stale_days` — threshold for "stale" (default: 2)
 
 If the user specifies labels or a repo in their message, use those instead of config.yaml.
 
@@ -32,9 +32,9 @@ perPage: 50
 
 Collect all results. Deduplicate by PR number (a PR may have multiple matching labels).
 
-### Step 2 — Parse PR metadata from search results
+### Step 2 — Parse PR metadata
 
-For each PR extract: `number`, `title`, `html_url`, `user.login` (author), `assignee.login`, `created_at`, `updated_at`, `labels[].name`, `draft`, `comments`.
+For each PR extract: `number`, `title`, `html_url`, `user.login` (author), `assignee.login`, `created_at`, `updated_at`, `labels[].name`, `draft`, `comments`, `body`.
 
 Compute `days_open = today - created_at`.
 
@@ -48,43 +48,50 @@ Flag labels:
 
 Skip bot authors: `dependabot[bot]`, `red-hat-konflux[bot]`, `renovate[bot]`.
 
-### Step 3 — Fetch CI status for non-bot, non-WIP PRs
+Extract Jira ticket IDs from PR body: pattern `RHOAIENG-\d+`. Link as `https://issues.redhat.com/browse/<ticket>`.
 
-For each qualifying PR (not bot, not WIP/draft), call `get_pull_request_status` **one at a time**:
-```
-owner, repo, pullNumber
-```
+### Step 3 — Fetch CI status (sequential, one at a time)
 
-From the response, find the `tide` status context. Its `description` contains the merge blocker, e.g.:
-- `"Not mergeable. Needs approved, lgtm labels."` → extract missing labels
-- `"Not mergeable. Merge conflict."` → conflict
-- absent / success → mergeable
+For each non-bot, non-WIP PR, call `get_pull_request_status` one at a time.
 
-Check if any non-CodeRabbit status has `state: "failure"` → CI failure.
+From the response:
+- Find `context: "tide"` → its `description` reveals merge blockers (e.g. `"Needs approved, lgtm labels."`, `"Merge conflict."`)
+- Find any non-CodeRabbit status with `state: "failure"` → CI failure
+- Overnight failures = CI checks with `updated_at` between yesterday 18:00 and today 08:00 local time and `state: "failure"`
+
+**Never call `get_pull_request_reviews`** — it hangs. Use label signals (`lgtm`, `approved`) instead.
 
 ### Step 4 — Build the report
 
-Run `python3 scripts/process_prs.py <path-to-collected-json>` to format output, OR format inline using the template below.
+Use the output template below. Run `python3 scripts/process_prs.py <prs.json>` to format, or format inline.
 
 ## Output Template
 
 ```markdown
-## PR Standup — <date>
-**Repo**: <owner/repo> | **Labels**: <label list>
+## PR Health Report — <date>
+**Repo**: <owner/repo> | **Team**: <team> | **Stale**: 2+ days
 
 ---
 
-### 🔴 Blocked / On Hold
+### 🔴 Blocked
+PRs with `do-not-merge/hold` or merge conflicts.
 | # | Title | Author | Assignee | Age | Reason |
 
-### 🟡 Waiting for Review (5+ days, CI green)
-| # | Title | Author | Assignee | Age | Missing |
+### 🔥 CI Failing
+PRs where CI checks are failing (overnight failures flagged).
+| # | Title | Author | Age | Failed Check | Jira |
 
-### 🟢 Active — In Review Window (< 5 days)
-| # | Title | Author | Age | Jira | Notes |
+### 👀 Waiting for Review
+Open 2+ days, CI green, missing `approved` and/or `lgtm`.
+| # | Title | Author | Assignee | Age | Jira | Needs |
+
+### 🟢 Recently Opened
+Open < 2 days — in the review window, no action needed yet.
+| # | Title | Author | Age | Jira |
 
 ### ⚫ WIP / Draft
-| # | Title | Author | Age | Notes |
+Not ready for review yet.
+| # | Title | Author | Age | Note |
 
 ### 🤖 Bot PRs — Needs `/ok-to-test`
 | # | Title | Age |
@@ -92,26 +99,29 @@ Run `python3 scripts/process_prs.py <path-to-collected-json>` to format output, 
 ---
 
 ### Action Items
+Prioritised — most urgent first.
 | Priority | Action |
 ```
 
-Fill each section:
-- **Blocked** — has `do-not-merge/hold`
-- **Waiting for Review** — `days_open >= stale_days`, no hold/WIP, CI green, missing `approved`/`lgtm`
-- **Active** — `days_open < stale_days`, no hold/WIP
-- **WIP/Draft** — `draft=true` or `do-not-merge/work-in-progress`
-- **Bot PRs** — bot authors with `needs-ok-to-test`
+## Section definitions
 
-For Action Items, list the most urgent items first with the reviewer/assignee tagged.
+| Section | Criteria |
+|---------|----------|
+| Blocked | `do-not-merge/hold` label OR tide says "Merge conflict" |
+| CI Failing | Any non-CodeRabbit check has `state: failure` |
+| Waiting for Review | `days_open >= stale_days`, no hold/WIP, CI green, missing `approved`/`lgtm` |
+| Recently Opened | `days_open < stale_days`, no hold/WIP |
+| WIP / Draft | `draft=true` OR `do-not-merge/work-in-progress` label |
+| Bot PRs | Bot author + `needs-ok-to-test` label |
 
 ## Critical Rules
 
 1. **Never call MCP tools in parallel** — always sequential, one at a time
-2. **Never use `get_pull_request_reviews`** — it hangs; use label signals (`lgtm`, `approved`) instead
-3. **Skip CodeRabbit** from CI status checks and review summaries
-4. **Jira links** — extract `RHOAIENG-XXXXX` from PR body and include as link: `https://issues.redhat.com/browse/<ticket>`
+2. **Never use `get_pull_request_reviews`** — hangs; use `lgtm`/`approved` labels instead
+3. **Skip CodeRabbit** from all CI and review output
+4. **Action Items** — list reviewer/assignee by name so ownership is clear
 
 ## Additional Resources
 
 - Team configuration: [config.yaml](config.yaml)
-- PR processing script: [scripts/process_prs.py](scripts/process_prs.py)
+- PR data formatter: [scripts/process_prs.py](scripts/process_prs.py)
