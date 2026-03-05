@@ -1,0 +1,28 @@
+---
+description: Shorthand trigger commands for the pr-watch PR health skill
+alwaysApply: true
+---
+
+# PR Watch Commands
+
+When the user types any of the commands below, **immediately run the pr-watch skill** — no clarifying questions, no preamble, just execute.
+
+## Command Map
+
+| Command | What to run |
+|---------|-------------|
+| `pr <team>` | Quick mode PR health for `<team>` (e.g. `pr gen-ai`) |
+| `pr ci <team>` | CI mode PR health for `<team>` — fetch CI status for stuck PRs |
+| `pr all` | Quick mode for `all-areas` team |
+| `pr ci all` | CI mode for `all-areas` team |
+| `pr blocked <team>` | Show only blocked PRs for `<team>` |
+| `pr stale <team>` | Show only PRs waiting 2+ days for `<team>` |
+| `pr bots <team>` | Show only bot PRs needing `/ok-to-test` for `<team>` |
+
+## Rules
+
+- `pr <team>` → **Quick mode** (no CI calls, label signals only, fast)
+- `pr ci <team>` → **CI mode** (fetch `get_pull_request_status` for stuck PRs only)
+- Team names come from `.cursor/skills/pr-standup/config.yaml`
+- If `<team>` is not in config.yaml, use it as a raw label (e.g. `pr area/nim`)
+- Never ask for confirmation — run immediately
