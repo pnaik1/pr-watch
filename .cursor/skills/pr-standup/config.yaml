@@ -1,0 +1,87 @@
+# PR Standup Configuration
+# ─────────────────────────────────────────────────────────────
+# Each team defines a name and the GitHub labels to watch.
+# The agent will fetch all open PRs matching any of those labels.
+#
+# To add a new team: copy an existing entry and update name + labels.
+# To run for a specific team: tell the agent "run standup for <team-name>"
+# ─────────────────────────────────────────────────────────────
+
+repo: opendatahub-io/odh-dashboard
+
+# Number of days before a PR is considered "stale"
+stale_days: 5
+
+# Bot authors to skip (not included in review-needed sections)
+bot_authors:
+  - dependabot[bot]
+  - red-hat-konflux[bot]
+  - renovate[bot]
+  - github-actions[bot]
+
+# Reviewers/bots to exclude from review summaries
+skip_reviewers:
+  - coderabbit
+  - github-actions[bot]
+
+teams:
+  - name: gen-ai
+    labels:
+      - area/gen-ai
+    description: Gen AI Studio team
+
+  - name: eval-hub
+    labels:
+      - area/eval-hub
+    description: Eval Hub team
+
+  - name: gen-ai-and-eval-hub
+    labels:
+      - area/gen-ai
+      - area/eval-hub
+    description: Combined Gen AI + Eval Hub standup (default)
+
+  - name: model-registry
+    labels:
+      - area/model-registry
+    description: Model Registry team
+
+  - name: pipelines
+    labels:
+      - area/pipelines
+      - area/ds-pipelines
+    description: Data Science Pipelines team
+
+  - name: model-serving
+    labels:
+      - area/model-serving
+      - area/nim
+    description: Model Serving team
+
+  - name: platform
+    labels:
+      - area/platform
+      - area/backend
+      - area/frontend
+      - area/components
+    description: Platform / Core team
+
+  - name: all-areas
+    labels:
+      - area/gen-ai
+      - area/eval-hub
+      - area/model-registry
+      - area/pipelines
+      - area/model-serving
+      - area/platform
+      - area/workbenches
+      - area/connections
+      - area/hardware-profiles
+      - area/maas
+      - area/autorag
+      - area/automl
+      - area/feature-store
+      - area/agentic-rag
+      - area/ai-safety-trusty
+      - area/nim
+    description: All area teams combined

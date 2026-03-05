@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Cursor local state (not skills — skills are committed intentionally)
+.cursor/projects/
+.cursor/browser-logs/
+.cursor/extensions/
+.cursor/ai-tracking/
+.cursor/plans/
+.cursor/blocklist
+.cursor/ide_state.json
+.cursor/argv.json
+.cursor/mcp.json
+.cursor/unified_repo_list.json
+.cursor/.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Editor
+*.swp
+*.swo
