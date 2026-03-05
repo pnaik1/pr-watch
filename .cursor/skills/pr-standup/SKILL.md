@@ -16,6 +16,15 @@ Read team config from [config.yaml](config.yaml) before starting. It defines:
 
 If the user specifies labels or a repo in their message, use those instead of config.yaml.
 
+## Two modes
+
+**Quick mode** (default) — uses label signals only, no CI calls, finishes in seconds.
+**CI mode** — fetches CI status for stuck PRs only, triggered when user asks about CI failures.
+
+Detect which mode from the user's message:
+- CI mode keywords: "ci", "failing", "checks", "overnight", "broken build"
+- Everything else → Quick mode
+
 ## Workflow
 
 Follow these steps **sequentially** — never run MCP calls in parallel (causes Cursor to hang).
@@ -38,32 +47,38 @@ For each PR extract: `number`, `title`, `html_url`, `user.login` (author), `assi
 
 Compute `days_open = today - created_at`.
 
-Flag labels:
+Flag labels — these are the primary signals, sufficient for Quick mode:
 - `do-not-merge/hold` → BLOCKED
 - `do-not-merge/work-in-progress` → WIP
 - `needs-rebase` → NEEDS REBASE
 - `needs-ok-to-test` → BOT/CI GATED
-- `lgtm` → has lgtm
-- `approved` → has approved
+- `lgtm` → has lgtm (one approval signal present)
+- `approved` → fully approved
+- `Stale` → marked stale by bot
 
 Skip bot authors: `dependabot[bot]`, `red-hat-konflux[bot]`, `renovate[bot]`.
 
 Extract Jira ticket IDs from PR body: pattern `RHOAIENG-\d+`. Link as `https://issues.redhat.com/browse/<ticket>`.
 
-### Step 3 — Fetch CI status (sequential, one at a time)
+### Step 3 — CI status (CI mode only)
 
-For each non-bot, non-WIP PR, call `get_pull_request_status` one at a time.
+**Skip this step entirely in Quick mode.**
 
-From the response:
-- Find `context: "tide"` → its `description` reveals merge blockers (e.g. `"Needs approved, lgtm labels."`, `"Merge conflict."`)
-- Find any non-CodeRabbit status with `state: "failure"` → CI failure
-- Overnight failures = CI checks with `updated_at` between yesterday 18:00 and today 08:00 local time and `state: "failure"`
+In CI mode, only call `get_pull_request_status` for PRs that are:
+- Not a bot, not WIP/draft, not HOLD
+- `days_open >= 2` (stuck)
+- Missing both `lgtm` and `approved`
 
-**Never call `get_pull_request_reviews`** — it hangs. Use label signals (`lgtm`, `approved`) instead.
+Call one at a time. From the response:
+- `context: "tide"` → `description` reveals merge blockers
+- Any non-CodeRabbit status with `state: "failure"` → CI failure
+- Overnight = `updated_at` between yesterday 18:00–today 08:00 and `state: "failure"`
+
+**Never call `get_pull_request_reviews`** — it hangs. Use `lgtm`/`approved` labels instead.
 
 ### Step 4 — Build the report
 
-Use the output template below. Run `python3 scripts/process_prs.py <prs.json>` to format, or format inline.
+Use the output template below. Add a note at the top if in Quick mode: `> ⚡ Quick mode — CI status not fetched. Ask "show CI failures" for full check.`
 
 ## Output Template
 
